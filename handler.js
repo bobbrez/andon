@@ -12,29 +12,14 @@ const helpTextLong  = `You can Send me "!" at any point and I'll let the hosts t
                       `You can also send me "@" with a message and I'll pass the message along anonymously.\n\n` +
                       `If you want to change your name, send me "$" with the name that you want.\n\n`;
 
-const registerGuest = async body => {
-  const params = {
-    TableName: process.env.GUESTS_TABLE,
-    Item: {
-      smsNumber: body.From,
-      name: body.Body,
-      createdAt: new Date().toISOString()
-    }
-  };
+const generateId = () => {
+  var text = "";
+  var possible = "ABCDEFGHJKLMNPQRSTUXYZ123456789";
 
-  try {
-    await db.put(params).promise();
-    
-    return `Hi ${body.Body}. You're all set. \n\n${helpTextLong}`
+  for (var i = 0; i < 3; i++)
+    text += possible.charAt(Math.floor(Math.random() * possible.length));
 
-  } catch (error) {
-    console.error('ERROR SAVING PROFILE', error);
-    return 'Something went wrong, please wait a moment and try again.';
-  }
-}
-
-const returningGuest = guest => {
-  return `Hi ${guest.name}! How can I help you?\n\n${helpTextShort}`;
+  return text;
 }
 
 const fetchGuest = async body => {
@@ -60,8 +45,76 @@ const buildMessage = message => ({
   body: `<?xml version="1.0" encoding="UTF-8"?><Response><Message>${message}</Message></Response>`
 })
 
+const registerGuest = async body => {
+  const params = {
+    TableName: process.env.GUESTS_TABLE,
+    Item: {
+      smsNumber: body.From,
+      name: body.Body,
+      createdAt: new Date().toISOString()
+    }
+  };
+
+  try {
+    await db.put(params).promise();
+    
+    return `Hi ${body.Body}. You're all set. \n\n${helpTextLong}`
+
+  } catch (error) {
+    console.error('ERROR SAVING PROFILE', error);
+    return 'Something went wrong, please wait a moment and try again.';
+  }
+}
+
 const helpMessage = guest => {
   return `Hi ${guest.name}, Hopefully this helps you. \n\n${helpTextLong}`
+}
+
+const returningGuest = guest => {
+  return `Hi ${guest.name}! How can I help you?\n\n${helpTextShort}`;
+}
+
+const anonMessage = async body => {
+  try {
+    const params = {
+      TableName: process.env.MESSAGES_TABLE,
+      Item: {
+        messageId: generateId(),
+        type: 'ANONYMOUS',
+        text: body.Body,
+        createdAt: new Date().toISOString()
+      }
+    };    
+    
+    await db.put(params).promise();
+
+    return 'Got it, passing that it along now anonymously';
+  } catch (error) {
+    console.log('ANON MESSAGE ERROR', error)
+    return 'Oh no, something went wrong, please wait a moment and try again';
+  }
+}
+
+const checkInRequest = async (guest, body) => {
+  try {
+    const params = {
+      TableName: process.env.MESSAGES_TABLE,
+      Item: {
+        messageId: generateId(),
+        type: 'CHECKIN',
+        guestSmsNumber: guest.smsNumber,
+        text: body.Body,
+        createdAt: new Date().toISOString()
+      }
+    };    
+    
+    await db.put(params).promise();
+
+    return 'Got it, sending the request.';
+  } catch (error) {
+    console.log('ANON MESSAGE ERROR', error)
+    return 'Oh no, something went wrong, please wait a moment and try again';
+  }
 }
 
 const processMessage = async body => {
@@ -74,6 +127,10 @@ const processMessage = async body => {
   switch(command) {
     case '?':
       return helpMessage(guest);
+    case '@':
+      return anonMessage(body);
+    case '!':
+      return checkInRequest(guest, body);
     default:
       return returningGuest(guest);
   };

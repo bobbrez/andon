@@ -46,13 +46,17 @@ provider:
         - Fn::GetAtt:
           - GuestsTable
           - Arn
-
+        - Fn::GetAtt:
+          - MessagesTable
+          - Arn
 functions:
   receiveSms:
     handler: handler.receiveSms
     environment:
       GUESTS_TABLE:
         Ref: GuestsTable
+      MESSAGES_TABLE:
+        Ref: MessagesTable
     events:
       - http:
           path: incoming
@@ -76,6 +80,20 @@ resources:
         ProvisionedThroughput:
           ReadCapacityUnits: ${self:custom.tableThroughput}
           WriteCapacityUnits: ${self:custom.tableThroughput}
+    
+    MessagesTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:custom.stage}-andon-messages
+        AttributeDefinitions:
+          - AttributeName: messageId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: messageId
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: ${self:custom.tableThroughput}
+          WriteCapacityUnits: ${self:custom.tableThroughput}
 
   Outputs:
     GuestsTable:
@@ -84,3 +102,10 @@ resources:
         Ref: GuestsTable
       Export:
           Name: ${self:custom.stage}-AndonGuestsTable
+
+    MessagesTable:
+      Description: A reference to the Andon MessagesTable table
+      Value: 
+        Ref: MessagesTable
+      Export:
+          Name: ${self:custom.stage}-AndonMessagesTable
