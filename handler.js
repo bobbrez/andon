@@ -7,6 +7,11 @@ AWS.config.update({region: 'us-east-1'});
 
 const db = new AWS.DynamoDB.DocumentClient();
 
+const helpTextShort = `Request a Checkin with\n"! some optional message"\n\nAnonymous Message with\n"@ some message"\n\nChange your name with\n"$ your name"\n\nAndon Help with\n"?"`;
+const helpTextLong  = `You can Send me "!" at any point and I'll let the hosts to check in with you; If you include a message, I'll pass it along too.\n\n` +
+                      `You can also send me "@" with a message and I'll pass the message along anonymously.\n\n` +
+                      `If you want to change your name, send me "$" with the name that you want.\n\n`;
+
 const registerGuest = async body => {
   const params = {
     TableName: process.env.GUESTS_TABLE,
@@ -20,10 +25,31 @@ const registerGuest = async body => {
   try {
     await db.put(params).promise();
     
-    return `Hi ${body.Body}. You're all set. \n\nSend me "!" at any point and I'll let the host know to check in with you; If you include a message, I'll pass it along too.\n\nOr send me "@" with a message to send a message to the host anonymously."`
+    return `Hi ${body.Body}. You're all set. \n\n${helpTextLong}`
 
   } catch (error) {
     console.error('ERROR SAVING PROFILE', error);
+    return 'Something went wrong, please wait a moment and try again.';
+  }
+}
+
+const returningGuest = guest => {
+  return `Hi ${guest.name}! How can I help you?\n\n${helpTextShort}`;
+}
+
+const fetchGuest = async body => {
+  const params = {
+    TableName: process.env.GUESTS_TABLE,
+    Key: {
+      smsNumber: body.From,
+    }
+  };
+
+  try {
+    const guest = await db.get(params).promise();
+    return guest.Item;
+  } catch (error) {
+    console.error('FETCH GUEST ERROR', error);
     return 'Something went wrong, please wait a moment and try again.';
   }
 }
@@ -34,8 +60,23 @@ const buildMessage = message => ({
   body: `<?xml version="1.0" encoding="UTF-8"?><Response><Message>${message}</Message></Response>`
 })
 
-const processMessage = (event, body) => {
-  return registerGuest(body);
+const helpMessage = guest => {
+  return `Hi ${guest.name}, Hopefully this helps you. \n\n${helpTextLong}`
+}
+
+const processMessage = async body => {
+  const guest = await fetchGuest(body);
+  if(!guest) {
+    return registerGuest(body);
+  }
+
+  const command = body.Body.trim()[0];
+  switch(command) {
+    case '?':
+      return helpMessage(guest);
+    default:
+      return returningGuest(guest);
+  };
 };
 
 export const receiveSms = async event => {
@@ -43,7 +84,7 @@ export const receiveSms = async event => {
   console.log(JSON.stringify(body));
   
   try {
-    const message = await processMessage(event, body);
+    const message = await processMessage(body);
     return buildMessage(message);
   } catch (error) {
     console.error(error);
