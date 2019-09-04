@@ -1,0 +1,39 @@
+service: ${self:custom.name}
+
+custom:
+  name: andon-service
+  stage: ${opt:stage, self:provider.stage}
+  environment: ${file(../../env.yml):${self:custom.stage}, file(../../env.yml):default}
+
+  webpack:
+    webpackConfig: ./webpack.config.js
+    includeModules: true
+
+  customDomain:
+    domainName: api.andon.bond.haus
+    basePath: ''
+    stage: ${self:provider.stage}
+    createRoute53Record: true
+
+plugins:
+  - serverless-webpack
+  - serverless-offline
+  - serverless-plugin-create-deployment-bucket
+
+provider:
+  name: aws
+  runtime: nodejs10.x
+  stage: prod
+  region: us-east-1
+  deploymentBucket: ${self:custom.stage}.${self:provider.region}.andon.deploy.bond.haus
+
+functions:
+  receiveSms:
+    handler: handler.receiveSms
+    events:
+      - http:
+          path: incoming
+          method: post
+          response:
+            headers:
+              Content-Type: "'text/xml'"
