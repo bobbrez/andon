@@ -107,6 +107,7 @@ const checkInRequest = async (guest, body) => {
         messageId: generateId(),
         type: 'CHECKIN',
         guestSmsNumber: guest.smsNumber,
+        guestName: guest.name,
         text: body.Body,
         createdAt: new Date().toISOString(),
         status: 'OPEN',
@@ -277,7 +278,7 @@ export const messageCreated = async event => {
       if(message.type === 'ANONYMOUS') {
         body = `Anonymous Message:\n${body}`;
       } else {
-        body = `From ${message.guestSmsNumber}:\n${body}`;
+        body = `From ${message.guestName}:\n${body}`;
       }
 
       for(let tyrant of tyrants) {
