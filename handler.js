@@ -12,7 +12,7 @@ const db = new AWS.DynamoDB.DocumentClient();
 const twilio = new Twilio(process.env.TWILIO_SID, process.env.TWILIO_AUTH);
 
 const helpTextShort = `Request a Checkin with\n"! some optional message"\n\nAnonymous Message with\n"@ some message"\n\nChange your name with\n"$ your name"\n\nAndon Help with\n"?"`;
-const helpTextLong  = `You can Send me "!" at any point and I'll let the hosts to check in with you; If you include a message, I'll pass it along too.\n\n` +
+const helpTextLong  = `You can Send me "!" at any point and I'll let the hosts know to check in with you; If you include a message, I'll pass it along too.\n\n` +
                       `You can also send me "@" with a message and I'll pass the message along anonymously.\n\n` +
                       `If you want to change your name, send me "$" with the name that you want.\n\n`;
 
@@ -300,7 +300,6 @@ export const messageCreated = async event => {
       };
 
       const text = await decryptMessage(message.text);
-      console.log(text)
       let body = `${text}\n\nReply with code "${message.messageId}" to acknowledge`;
       if(message.type === 'ANONYMOUS') {
         body = `Anonymous Message:\n${body}`;
