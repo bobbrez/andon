@@ -122,6 +122,36 @@ const checkInRequest = async (guest, body) => {
   }
 }
 
+const changeName = async (guest, body) => {
+  const name = body.Body.split('$')[1].trim();
+
+  const params = {
+    TableName: process.env.GUESTS_TABLE,
+    Key: { 
+      'smsNumber' : guest.smsNumber,
+    },
+    ConditionExpression: '#smsNumber = :smsNumber',
+    UpdateExpression: 'set #name = :name',
+    ExpressionAttributeNames: {
+      '#smsNumber' : 'smsNumber',
+      '#name' : 'name',
+    },
+    ExpressionAttributeValues: {
+      ':smsNumber' : guest.smsNumber,
+      ':name' : name,
+    }
+  };
+
+  try {
+    await db.update(params).promise();
+
+    return `Updated your name. Hi ${name}!`
+  } catch (error) {
+    console.error('CHANGE NAME ERROR', error);
+    return 'Something went wrong, please wait a moment and try again.';
+  }  
+}
+
 const processAckCode = async (guest, body) => {
   if(guest.role !== 'TYRANT') {
     return null;
@@ -168,6 +198,8 @@ const processMessage = async body => {
 
   const command = body.Body.trim()[0];
   switch(command) {
+    case '$':
+      return changeName(guest, body);
     case '?':
       return helpMessage(guest);
     case '@':
