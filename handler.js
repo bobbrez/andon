@@ -296,7 +296,7 @@ export const escalateNotifications = async escalateNotifications => {
     console.log('captains', captains);
 
     const messageIds = messages.Items.map(m => m.messageId).join('\n');
-    const body = `Please connect with the Tyrants about unacknowledged messages:\n\n${messageIds}`;
+    const body = `Please connect with party hosts about unacknowledged messages:\n\n${messageIds}`;
 
     console.log('messageIds', messageIds);
 
