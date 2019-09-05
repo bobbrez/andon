@@ -7,6 +7,7 @@ import moment from 'moment';
 
 AWS.config.update({region: 'us-east-1'});
 
+const kms = new AWS.KMS();
 const db = new AWS.DynamoDB.DocumentClient();
 const twilio = new Twilio(process.env.TWILIO_SID, process.env.TWILIO_AUTH);
 
@@ -77,14 +78,36 @@ const returningGuest = guest => {
   return `Hi ${guest.name}! How can I help you?\n\n${helpTextShort}`;
 }
 
+const encryptMessage = async body => {
+  const params = {
+    KeyId: process.env.KMS_KEY,
+    Plaintext: body,
+  };
+
+  const response = await kms.encrypt(params).promise();
+
+  return response.CiphertextBlob.toString('base64');
+}
+
+const decryptMessage = async body => {
+  try {
+    const blob = Buffer(body, 'base64');
+    const resp = await kms.decrypt({ CiphertextBlob: blob }).promise();
+    return resp.Plaintext.toString('ascii');
+  } catch(_) {
+    return '';
+  }
+}
+
 const anonMessage = async body => {
   try {
+    const text = await encryptMessage(body.Body);
     const params = {
       TableName: process.env.MESSAGES_TABLE,
       Item: {
+        text,
         messageId: generateId(),
         type: 'ANONYMOUS',
-        text: body.Body,
         createdAt: new Date().toISOString(),
         status: 'OPEN',
       }
@@ -101,14 +124,15 @@ const anonMessage = async body => {
 
 const checkInRequest = async (guest, body) => {
   try {
+    const text = await encryptMessage(body.Body);
     const params = {
       TableName: process.env.MESSAGES_TABLE,
       Item: {
+        text,
         messageId: generateId(),
         type: 'CHECKIN',
         guestSmsNumber: guest.smsNumber,
         guestName: guest.name,
-        text: body.Body,
         createdAt: new Date().toISOString(),
         status: 'OPEN',
       }
@@ -154,7 +178,7 @@ const changeName = async (guest, body) => {
 }
 
 const processAckCode = async (guest, body) => {
-  if(guest.role !== 'TYRANT') {
+  if(guest.role !== 'HOST') {
     return null;
   }
 
@@ -250,18 +274,18 @@ export const messageCreated = async event => {
       '#role': 'role'
     },
     ExpressionAttributeValues: {
-      ':role': 'TYRANT'
+      ':role': 'HOST'
     },
     IndexName: 'role-smsNumber-index'
   };
 
-  let tyrants = [];
+  let hosts = [];
 
   try {
     const query = await db.query(params).promise();
-    tyrants = query.Items.map(item => item);
+    hosts = query.Items.map(item => item);
   } catch (error) {
-    console.log('FETCH TYRANTS', error);
+    console.log('FETCH HOST', error);
   }
 
   for(let record of event.Records) {
@@ -271,18 +295,21 @@ export const messageCreated = async event => {
         createdAt: (record.dynamodb.NewImage.createdAt || {}).S,
         text: (record.dynamodb.NewImage.text || {}).S,
         type: (record.dynamodb.NewImage.type || {}).S,
-        guestSmsNumber: (record.dynamodb.NewImage.guestSmsNumber || {}).S
+        guestSmsNumber: (record.dynamodb.NewImage.guestSmsNumber || {}).S,
+        guestName: (record.dynamodb.NewImage.guestName || {}).S,
       };
 
-      let body = `${message.text}\n\nReply with code "${message.messageId}" to acknowledge`;
+      const text = await decryptMessage(message.text);
+      console.log(text)
+      let body = `${text}\n\nReply with code "${message.messageId}" to acknowledge`;
       if(message.type === 'ANONYMOUS') {
         body = `Anonymous Message:\n${body}`;
       } else {
-        body = `From ${message.guestName}:\n${body}`;
+        body = `Check-in with ${message.guestName}:\n${body}`;
       }
 
-      for(let tyrant of tyrants) {
-        await sendText(tyrant.smsNumber, body);
+      for(let host of hosts) {
+        await sendText(host.smsNumber, body);
       }
     }
   }
@@ -312,29 +339,29 @@ export const escalateNotifications = async escalateNotifications => {
 
     if(messages.Items.length === 0) return;
 
-    const captainsParams = {
+    const supporterParams = {
       TableName: process.env.GUESTS_TABLE,
       KeyConditionExpression: '#role = :role',
       ExpressionAttributeNames: {
         '#role': 'role'
       },
       ExpressionAttributeValues: {
-        ':role': 'CAPTAIN'
+        ':role': 'SUPPORTER'
       },
       IndexName: 'role-index'
     };
   
-    const captains = await db.query(captainsParams).promise();
+    const supporters = await db.query(supporterParams).promise();
 
-    console.log('captains', captains);
+    console.log('supporters', supporters);
 
     const messageIds = messages.Items.map(m => m.messageId).join('\n');
     const body = `Please connect with party hosts about unacknowledged messages:\n\n${messageIds}`;
 
     console.log('messageIds', messageIds);
 
-    for(let captain of captains.Items) {
-      await sendText(captain.smsNumber, body);
+    for(let supporter of supporters.Items) {
+      await sendText(supporter.smsNumber, body);
     }
   } catch (error) {
     console.log('ERROR MESSAGING ASSISTANTS', error);

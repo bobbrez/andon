@@ -81,6 +81,7 @@ functions:
   receiveSms:
     handler: handler.receiveSms
     environment:
+      KMS_KEY: ${ssm:AndonKmsKey}
       GUESTS_TABLE:
         Ref: GuestsTable
       MESSAGES_TABLE:
@@ -99,6 +100,7 @@ functions:
   messageCreated:
     handler: handler.messageCreated
     environment:
+      KMS_KEY: ${ssm:AndonKmsKey}
       GUESTS_TABLE:
         Ref: GuestsTable
       MESSAGES_TABLE:
