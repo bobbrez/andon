@@ -46,9 +46,37 @@ provider:
         - Fn::GetAtt:
           - GuestsTable
           - Arn
+        - Fn::Join:
+          - '/'
+          -
+            - Fn::GetAtt:
+              - GuestsTable
+              - Arn
+            - '*'
+        - Fn::Join:
+          - '/'
+          -
+            - Fn::GetAtt:
+              - GuestsTable
+              - Arn
+            - 'index/*'
         - Fn::GetAtt:
           - MessagesTable
           - Arn
+        - Fn::Join:
+          - '/'
+          -
+            - Fn::GetAtt:
+              - MessagesTable
+              - Arn
+            - '*'
+        - Fn::Join:
+          - '/'
+          -
+            - Fn::GetAtt:
+              - MessagesTable
+              - Arn
+            - 'index/*'
 functions:
   receiveSms:
     handler: handler.receiveSms
@@ -57,6 +85,9 @@ functions:
         Ref: GuestsTable
       MESSAGES_TABLE:
         Ref: MessagesTable
+      TWILIO_SID: ${ssm:AndonTwilioSid}
+      TWILIO_AUTH: ${ssm:AndonTwilioToken}
+      TWILIO_SMS_NUMBER: ${ssm:AndonTwilioSmsNumber}
     events:
       - http:
           path: incoming
@@ -64,6 +95,38 @@ functions:
           response:
             headers:
               Content-Type: "'text/xml'"
+
+  messageCreated:
+    handler: handler.messageCreated
+    environment:
+      GUESTS_TABLE:
+        Ref: GuestsTable
+      MESSAGES_TABLE:
+        Ref: MessagesTable
+      TWILIO_SID: ${ssm:AndonTwilioSid}
+      TWILIO_AUTH: ${ssm:AndonTwilioToken}
+      TWILIO_SMS_NUMBER: ${ssm:AndonTwilioSmsNumber}
+    events:
+      - stream:
+          type: dynamodb
+          arn:
+            Fn::GetAtt: [MessagesTable, StreamArn]
+
+  escalateNotifications:
+    handler: handler.escalateNotifications
+    environment:
+      GUESTS_TABLE:
+        Ref: GuestsTable
+      MESSAGES_TABLE:
+        Ref: MessagesTable
+      TWILIO_SID: ${ssm:AndonTwilioSid}
+      TWILIO_AUTH: ${ssm:AndonTwilioToken}
+      TWILIO_SMS_NUMBER: ${ssm:AndonTwilioSmsNumber}
+    events:
+      - schedule:
+          name: ${self:custom.stage}-escalateNotifications
+          description: escalateNotifications
+          rate: rate(2 minutes)
 
 resources:
   Resources:
@@ -74,12 +137,26 @@ resources:
         AttributeDefinitions:
           - AttributeName: smsNumber
             AttributeType: S
+          - AttributeName: role
+            AttributeType: S
         KeySchema:
           - AttributeName: smsNumber
             KeyType: HASH
         ProvisionedThroughput:
           ReadCapacityUnits: ${self:custom.tableThroughput}
           WriteCapacityUnits: ${self:custom.tableThroughput}
+        GlobalSecondaryIndexes:
+          - IndexName: role-smsNumber-index
+            KeySchema:
+              - AttributeName: role
+                KeyType: HASH
+              - AttributeName: smsNumber
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+            ProvisionedThroughput:
+              ReadCapacityUnits: ${self:custom.tableThroughput}
+              WriteCapacityUnits: ${self:custom.tableThroughput}
     
     MessagesTable:
       Type: AWS::DynamoDB::Table
@@ -88,12 +165,30 @@ resources:
         AttributeDefinitions:
           - AttributeName: messageId
             AttributeType: S
+          - AttributeName: createdAt
+            AttributeType: S
+          - AttributeName: status
+            AttributeType: S
         KeySchema:
           - AttributeName: messageId
             KeyType: HASH
         ProvisionedThroughput:
           ReadCapacityUnits: ${self:custom.tableThroughput}
           WriteCapacityUnits: ${self:custom.tableThroughput}
+        StreamSpecification:
+          StreamViewType: NEW_AND_OLD_IMAGES
+        GlobalSecondaryIndexes:
+          - IndexName: status-created_at-index
+            KeySchema:
+              - AttributeName: status
+                KeyType: HASH
+              - AttributeName: createdAt
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+            ProvisionedThroughput:
+              ReadCapacityUnits: ${self:custom.tableThroughput}
+              WriteCapacityUnits: ${self:custom.tableThroughput}
 
   Outputs:
     GuestsTable:
