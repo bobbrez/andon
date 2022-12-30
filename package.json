@@ -20,7 +20,7 @@
     "babel-preset-env": "^1.7.0",
     "babel-preset-stage-3": "^6.24.1",
     "jest": "^21.2.1",
-    "serverless": "^1.34.1",
+    "serverless": "^1.83.3",
     "serverless-appsync-plugin": "^1.0.9",
     "serverless-domain-manager": "^3.3.0",
     "serverless-dynamodb-local": "^0.2.35",
